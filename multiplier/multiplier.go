@@ -22,6 +22,12 @@ active complexity multipliers.
 
 [Multiplier]s do not have any impact during action execution, they act only on the action set itself,
 redefining, creating or deleting elements from the test definition *before* the action set executes.
+
+# Action-Aware Skipping
+
+Multipliers may optionally implement [ActionAwareSkipper] to provide dynamic skip logic based on
+the test's action set. When [Skip] is called with a non-nil actions parameter, multipliers
+implementing this interface will be consulted to determine if the test should be skipped.
 */
 package multiplier
 
@@ -68,6 +74,24 @@ type Multiplier interface {
 	// Apply applies the complexity multiplier to the given action set, returning a new
 	// action set testing the multiplier.
 	Apply(source action.Actions) action.Actions
+}
+
+// ActionAwareSkipper is an optional interface that [Multiplier] implementations may
+// implement to provide action-based test skipping logic.
+//
+// When a multiplier implements this interface, [Skip] will call [ShouldSkip]
+// to determine if the test should be skipped based on the action set. This allows
+// multipliers to skip tests that are incompatible with or irrelevant to the multiplier's
+// purpose.
+//
+// This interface is optional - multipliers that do not implement it will not participate
+// in action-based skip decisions.
+type ActionAwareSkipper interface {
+	// ShouldSkip returns true if the test should be skipped based on the given action set.
+	//
+	// Implementations should return true when the action set contains elements that make
+	// the multiplier inapplicable or when running the multiplier would be redundant.
+	ShouldSkip(actions action.Actions) bool
 }
 
 // Register adds the given multiplier to the internal set of available multipliers.
@@ -128,7 +152,9 @@ func Apply(actions action.Actions) action.Actions {
 //     a value in the given `includes` set.
 //   - The active set of multipliers contains a multiplier with a name exactly matching
 //     a value in the given `excludes` set.
-func Skip(t testing.TB, includes []Name, excludes []Name) {
+//   - Any active multiplier implements [ActionAwareSkipper] and returns true from [ShouldSkip]
+//     for the given action set (only checked if actions is non-nil).
+func Skip(t testing.TB, actions action.Actions, includes []Name, excludes []Name) {
 	for _, multiplier := range activeMultipliers {
 		for _, exclude := range excludes {
 			if multiplier.Name() == exclude {
@@ -148,6 +174,14 @@ func Skip(t testing.TB, includes []Name, excludes []Name) {
 
 		if !included {
 			t.Skipf("skipping, required multiplier is not included. Name: %s", include)
+		}
+	}
+
+	for _, multiplier := range activeMultipliers {
+		if skipper, ok := multiplier.(ActionAwareSkipper); ok {
+			if skipper.ShouldSkip(actions) {
+				t.Skipf("skipping, multiplier %s requested skip based on actions", multiplier.Name())
+			}
 		}
 	}
 }
