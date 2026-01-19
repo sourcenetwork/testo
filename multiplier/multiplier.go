@@ -153,7 +153,7 @@ func Apply(actions action.Actions) action.Actions {
 //   - The active set of multipliers contains a multiplier with a name exactly matching
 //     a value in the given `excludes` set.
 //   - Any active multiplier implements [ActionAwareSkipper] and returns true from [ShouldSkip]
-//     for the given action set (only checked if actions is non-nil).
+//     for the given action set.
 func Skip(t testing.TB, actions action.Actions, includes []Name, excludes []Name) {
 	for _, multiplier := range activeMultipliers {
 		for _, exclude := range excludes {
